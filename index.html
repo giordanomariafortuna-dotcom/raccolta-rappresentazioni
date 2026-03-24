@@ -418,125 +418,184 @@ function buildQuestionEl(q) {
   div.className = 'question-block';
   div.id = 'qb-' + q.id;
 
-  // Build inner HTML
-  let extraHTML = '';
-  if (q.tipo === 'scala') {
-    extraHTML = `
-      <div style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;margin-top:0.4rem;">
-        <span style="font-size:0.75rem;color:var(--muted)">da</span>
-        <input type="number" class="small-input" id="qmin-${q.id}" style="width:50px" min="1" max="3" value="${q.scala_min||1}">
-        <span style="font-size:0.75rem;color:var(--muted)">a</span>
-        <input type="number" class="small-input" id="qmax-${q.id}" style="width:50px" min="2" max="10" value="${q.scala_max||5}">
-        <input type="text" class="small-input" id="qlmin-${q.id}" style="width:100px" placeholder="Etichetta min" value="${esc(q.label_min||'Per niente')}">
-        <input type="text" class="small-input" id="qlmax-${q.id}" style="width:100px" placeholder="Etichetta max" value="${esc(q.label_max||'Moltissimo')}">
-      </div>`;
-  } else if (q.tipo === 'singola' || q.tipo === 'multipla') {
-    const opzioniTxt = Array.isArray(q.opzioni) ? q.opzioni.join('\n') : (q.opzioni || '');
-    const tipoLabel = q.tipo === 'singola' ? 'scelta singola (radio)' : 'scelta multipla (checkbox)';
-    extraHTML = `
-      <div style="margin-top:0.4rem">
-        <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.4rem">Opzioni, una per riga — ${tipoLabel}</div>
-        <textarea class="small-input" id="qopz-${q.id}" style="width:100%;min-height:80px;resize:vertical;padding:0.4rem;line-height:1.6"
-          placeholder="Opzione 1&#10;Opzione 2&#10;Opzione 3">${esc(opzioniTxt)}</textarea>
-      </div>`;
-  } else {
-    extraHTML = `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">Campo testo libero per gli intervistati</div>`;
-  }
+  // State (mutable)
+  let obbligatorio = !!q.obbligatorio;
+  let con_altro    = !!q.con_altro;
+
+  // ── header ──────────────────────────────────────────
+  const header = document.createElement('div');
+  header.className = 'question-label';
 
   const tipoLabels = {aperta:'risposta aperta', scala:'scala di valutazione', singola:'scelta singola', multipla:'scelta multipla'};
-  const mostraAltro = (q.tipo === 'singola' || q.tipo === 'multipla') ? '' : 'visibility:hidden;pointer-events:none';
+  const badge = document.createElement('span');
+  badge.className = 'q-type-badge';
+  badge.textContent = tipoLabels[q.tipo] || q.tipo;
 
-  div.innerHTML = `
-    <div class="question-label">
-      Domanda
-      <span class="q-type-badge">${tipoLabels[q.tipo]||q.tipo}</span>
-      <button class="btn-remove" id="qdel-${q.id}">✕</button>
-    </div>
-    <input class="question-text-input" type="text" id="qtxt-${q.id}"
-      placeholder="Scrivi la domanda…" value="${esc(q.testo||'')}">
-    ${extraHTML}
-    <div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin-top:0.75rem;padding-top:0.6rem;border-top:1px dashed var(--border);align-items:center">
-      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.82rem;color:var(--muted)">
-        <div class="toggle-track" id="tobb-${q.id}" style="background:${q.obbligatorio?'var(--accent)':'var(--border)'}">
-          <div class="toggle-thumb" style="transform:translateX(${q.obbligatorio?18:2}px)"></div>
-        </div>
-        Obbligatoria
-      </label>
-      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.82rem;color:var(--muted);${mostraAltro}">
-        <div class="toggle-track" id="taltro-${q.id}" style="background:${q.con_altro?'var(--accent)':'var(--border)'}">
-          <div class="toggle-thumb" style="transform:translateX(${q.con_altro?18:2}px)"></div>
-        </div>
-        Aggiungi "Altro"
-      </label>
-      <div style="margin-left:auto;display:flex;align-items:center;gap:0.5rem">
-        <span id="qsavedmsg-${q.id}" style="font-size:0.78rem;color:var(--green);display:none">✓ Salvato</span>
-        <button class="btn btn-primary" id="qsavebtn-${q.id}">💾 Salva</button>
-      </div>
-    </div>`;
+  const delBtn = document.createElement('button');
+  delBtn.className = 'btn-remove';
+  delBtn.textContent = '✕';
+  delBtn.addEventListener('click', () => deleteQuestion(q.id, q.rappresentazione_id));
 
-  // State tracking
-  let obbligatorio = !!q.obbligatorio;
-  let con_altro = !!q.con_altro;
+  const headerLabel = document.createElement('span');
+  headerLabel.textContent = 'Domanda ';
+  header.appendChild(headerLabel);
+  header.appendChild(badge);
+  header.appendChild(delBtn);
+  div.appendChild(header);
 
-  // Toggle obbligatorio
-  div.querySelector('#tobb-' + q.id).addEventListener('click', () => {
-    obbligatorio = !obbligatorio;
-    const track = div.querySelector('#tobb-' + q.id);
-    track.style.background = obbligatorio ? 'var(--accent)' : 'var(--border)';
-    track.querySelector('.toggle-thumb').style.transform = `translateX(${obbligatorio ? 18 : 2}px)`;
-  });
+  // ── testo domanda ─────────────────────────────────
+  const txtInput = document.createElement('input');
+  txtInput.className = 'question-text-input';
+  txtInput.type = 'text';
+  txtInput.id = 'qtxt-' + q.id;
+  txtInput.placeholder = 'Scrivi la domanda…';
+  txtInput.value = q.testo || '';
+  div.appendChild(txtInput);
 
-  // Toggle con_altro
-  div.querySelector('#taltro-' + q.id).addEventListener('click', () => {
-    con_altro = !con_altro;
-    const track = div.querySelector('#taltro-' + q.id);
-    track.style.background = con_altro ? 'var(--accent)' : 'var(--border)';
-    track.querySelector('.toggle-thumb').style.transform = `translateX(${con_altro ? 18 : 2}px)`;
-  });
+  // ── extra per tipo ────────────────────────────────
+  if (q.tipo === 'scala') {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;margin-top:0.4rem';
 
-  // Delete button
-  div.querySelector('#qdel-' + q.id).addEventListener('click', () => {
-    deleteQuestion(q.id, q.rappresentazione_id);
-  });
+    const mk = (tag, attrs) => { const el = document.createElement(tag); Object.assign(el, attrs); return el; };
+    const mkSpan = t => { const s = document.createElement('span'); s.style.cssText='font-size:0.75rem;color:var(--muted)'; s.textContent=t; return s; };
 
-  // Save button
-  div.querySelector('#qsavebtn-' + q.id).addEventListener('click', async () => {
-    const btn = div.querySelector('#qsavebtn-' + q.id);
-    btn.disabled = true;
-    btn.textContent = '…';
+    const minIn  = mk('input', {type:'number', className:'small-input', id:'qmin-'+q.id,  min:1,  max:3,  value: q.scala_min||1});  minIn.style.width='50px';
+    const maxIn  = mk('input', {type:'number', className:'small-input', id:'qmax-'+q.id,  min:2,  max:10, value: q.scala_max||5}); maxIn.style.width='50px';
+    const lminIn = mk('input', {type:'text',   className:'small-input', id:'qlmin-'+q.id, placeholder:'Etichetta min', value: q.label_min||'Per niente'}); lminIn.style.width='110px';
+    const lmaxIn = mk('input', {type:'text',   className:'small-input', id:'qlmax-'+q.id, placeholder:'Etichetta max', value: q.label_max||'Moltissimo'}); lmaxIn.style.width='110px';
+
+    [mkSpan('da'), minIn, mkSpan('a'), maxIn, lminIn, lmaxIn].forEach(el => row.appendChild(el));
+    div.appendChild(row);
+
+  } else if (q.tipo === 'singola' || q.tipo === 'multipla') {
+    const wrap = document.createElement('div');
+    wrap.style.marginTop = '0.4rem';
+
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:0.78rem;color:var(--muted);margin-bottom:0.4rem';
+    hint.textContent = 'Opzioni, una per riga — ' + (q.tipo === 'singola' ? 'scelta singola' : 'scelta multipla');
+    wrap.appendChild(hint);
+
+    const opzTA = document.createElement('textarea');
+    opzTA.className = 'small-input';
+    opzTA.id = 'qopz-' + q.id;
+    opzTA.style.cssText = 'width:100%;min-height:80px;resize:vertical;padding:0.4rem;line-height:1.6';
+    opzTA.placeholder = 'Opzione 1
+Opzione 2
+Opzione 3';
+    opzTA.value = Array.isArray(q.opzioni) ? q.opzioni.join('
+') : (q.opzioni || '');
+    wrap.appendChild(opzTA);
+    div.appendChild(wrap);
+
+  } else {
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:0.78rem;color:var(--muted);margin-top:0.3rem';
+    hint.textContent = 'Campo testo libero per gli intervistati';
+    div.appendChild(hint);
+  }
+
+  // ── toggle row ────────────────────────────────────
+  const toggleRow = document.createElement('div');
+  toggleRow.style.cssText = 'display:flex;gap:1.5rem;flex-wrap:wrap;margin-top:0.75rem;padding-top:0.6rem;border-top:1px dashed var(--border);align-items:center';
+
+  function makeToggle(labelText, initial, onChange) {
+    const label = document.createElement('label');
+    label.style.cssText = 'display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.82rem;color:var(--muted)';
+
+    const track = document.createElement('div');
+    track.className = 'toggle-track';
+    const thumb = document.createElement('div');
+    thumb.className = 'toggle-thumb';
+    track.appendChild(thumb);
+
+    let state = initial;
+    function refresh() {
+      track.style.background = state ? 'var(--accent)' : 'var(--border)';
+      thumb.style.transform = `translateX(${state ? 18 : 2}px)`;
+    }
+    refresh();
+
+    track.addEventListener('click', () => {
+      state = !state;
+      refresh();
+      onChange(state);
+    });
+
+    const txt = document.createElement('span');
+    txt.textContent = labelText;
+    label.appendChild(track);
+    label.appendChild(txt);
+    return label;
+  }
+
+  const obbToggle = makeToggle('Obbligatoria', obbligatorio, v => { obbligatorio = v; });
+  toggleRow.appendChild(obbToggle);
+
+  if (q.tipo === 'singola' || q.tipo === 'multipla') {
+    const altroToggle = makeToggle('Aggiungi "Altro"', con_altro, v => { con_altro = v; });
+    toggleRow.appendChild(altroToggle);
+  }
+
+  // ── save button ───────────────────────────────────
+  const saveArea = document.createElement('div');
+  saveArea.style.cssText = 'margin-left:auto;display:flex;align-items:center;gap:0.5rem';
+
+  const savedMsg = document.createElement('span');
+  savedMsg.style.cssText = 'font-size:0.78rem;color:var(--green);display:none';
+  savedMsg.textContent = '✓ Salvato';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn btn-primary';
+  saveBtn.textContent = '💾 Salva';
+
+  saveBtn.addEventListener('click', async () => {
+    saveBtn.disabled = true;
+    saveBtn.textContent = '…';
 
     const fields = {
-      testo: div.querySelector('#qtxt-' + q.id)?.value || '',
+      testo: txtInput.value,
       obbligatorio,
       con_altro,
     };
 
     if (q.tipo === 'scala') {
-      fields.scala_min = +(div.querySelector('#qmin-' + q.id)?.value || 1);
-      fields.scala_max = +(div.querySelector('#qmax-' + q.id)?.value || 5);
-      fields.label_min = div.querySelector('#qlmin-' + q.id)?.value || '';
-      fields.label_max = div.querySelector('#qlmax-' + q.id)?.value || '';
+      fields.scala_min  = +(div.querySelector('#qmin-'  + q.id)?.value || 1);
+      fields.scala_max  = +(div.querySelector('#qmax-'  + q.id)?.value || 5);
+      fields.label_min  =   div.querySelector('#qlmin-' + q.id)?.value || '';
+      fields.label_max  =   div.querySelector('#qlmax-' + q.id)?.value || '';
     }
     if (q.tipo === 'singola' || q.tipo === 'multipla') {
       const raw = div.querySelector('#qopz-' + q.id)?.value || '';
-      fields.opzioni = raw.split('\n').map(s => s.trim()).filter(Boolean);
+      fields.opzioni = raw.split('
+').map(s => s.trim()).filter(Boolean);
     }
 
     const { error } = await sb.from('domande').update(fields).eq('id', q.id);
 
-    btn.disabled = false;
+    saveBtn.disabled = false;
     if (error) {
-      btn.textContent = '⚠️ Errore';
-      btn.style.background = '#c0392b';
-      showToast('Errore: ' + error.message, 'error');
+      saveBtn.textContent = '⚠️ Errore';
+      saveBtn.style.background = '#c0392b';
+      showToast('Errore salvataggio: ' + error.message, 'error');
     } else {
-      btn.textContent = '✓ Salvato';
-      btn.style.background = 'var(--green)';
-      const msg = div.querySelector('#qsavedmsg-' + q.id);
-      if (msg) { msg.style.display = 'inline'; setTimeout(() => msg.style.display='none', 2500); }
-      setTimeout(() => { btn.textContent = '💾 Salva'; btn.style.background = ''; }, 3000);
+      saveBtn.textContent = '✓ Salvato';
+      saveBtn.style.background = 'var(--green)';
+      savedMsg.style.display = 'inline';
+      setTimeout(() => {
+        saveBtn.textContent = '💾 Salva';
+        saveBtn.style.background = '';
+        savedMsg.style.display = 'none';
+      }, 2500);
+      showToast('✅ Domanda salvata!', 'success');
     }
   });
+
+  saveArea.appendChild(savedMsg);
+  saveArea.appendChild(saveBtn);
+  toggleRow.appendChild(saveArea);
+  div.appendChild(toggleRow);
 
   return div;
 }
@@ -966,4 +1025,3 @@ function showToast(msg, type='') {
 </script>
 </body>
 </html>
-
