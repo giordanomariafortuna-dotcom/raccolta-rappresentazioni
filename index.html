@@ -828,7 +828,7 @@ function buildCardEl(card) {
   if (card.immagine_url) {
     var img = document.createElement('img');
     img.src = card.immagine_url;
-    img.addEventListener('click', function (e) { e.stopPropagation(); openLightbox(card.immagine_url); });
+    img.addEventListener('click', function (e) { e.stopPropagation(); fileIn.click(); });
     imgArea.appendChild(img);
   } else {
     var ph = document.createElement('div');
